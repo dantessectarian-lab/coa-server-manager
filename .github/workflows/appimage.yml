@@ -1,0 +1,36 @@
+name: appimage
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  appimage:
+    # Older Ubuntu = older glibc, so the AppImage runs on more distributions.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2
+      - run: npm ci
+      # No updater signing key in a fork: build without updater artifacts.
+      - name: Disable updater artifacts
+        run: |
+          jq '.bundle.createUpdaterArtifacts = false' src-tauri/tauri.conf.json > tmp.json
+          mv tmp.json src-tauri/tauri.conf.json
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: npx tauri build --bundles appimage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coa-server-manager-appimage
+          path: target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
